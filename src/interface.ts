@@ -48,3 +48,11 @@ export interface IData {
   showHeader?: boolean;
   showFooter?: boolean;
 }
+
+export interface ISearchPlacesData {
+  lat: number;
+  lng: number;
+  keyword: string;
+  radius?: number;
+  callback?: any;
+}

@@ -39,6 +39,13 @@ declare module "@scom/scom-map/interface.ts" {
         showHeader?: boolean;
         showFooter?: boolean;
     }
+    export interface ISearchPlacesData {
+        lat: number;
+        lng: number;
+        keyword: string;
+        radius?: number;
+        callback?: any;
+    }
 }
 /// <amd-module name="@scom/scom-map/store.ts" />
 declare module "@scom/scom-map/store.ts" {
@@ -115,13 +122,31 @@ declare module "@scom/scom-map/config/index.tsx" {
     }
     export default class ScomMapConfig extends Module {
         private formEl;
-        private iframeMap;
+        private mapElm;
+        private mapWrapper;
+        private latInput;
+        private longInput;
         private _data;
+        private geocoder;
+        private placeService;
+        private infowindow;
         private searchTimer;
         constructor(parent?: Container, options?: any);
         get data(): IData;
         set data(value: IData);
         updateData(): Promise<void>;
+        iniGoogleMap(): void;
+        private updateMap;
+        private panTo;
+        private createLatLng;
+        private locate;
+        private findPlace;
+        private createMarker;
+        private getLocation;
+        private updateAlignment;
+        getDistance(lat1: number, lng1: number, lat2: number, lng2: number): number;
+        private initScript;
+        private googleMapsCallback;
         private renderUI;
         private onInputChanged;
         disconnectCallback(): void;

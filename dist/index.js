@@ -100,11 +100,13 @@ define("@scom/scom-map/utils.ts", ["require", "exports", "@scom/scom-map/store.t
                 },
                 lat: {
                     type: 'number',
-                    title: 'Latitude'
+                    title: 'Latitude',
+                    readOnly: true
                 },
                 long: {
                     type: 'number',
-                    title: 'Longitude'
+                    title: 'Longitude',
+                    readOnly: true
                 },
                 zoom: {
                     type: 'number',
@@ -172,7 +174,7 @@ define("@scom/scom-map/config/index.css.ts", ["require", "exports", "@ijstech/co
         $nest: {}
     });
 });
-define("@scom/scom-map/config/index.tsx", ["require", "exports", "@ijstech/components", "@scom/scom-map/utils.ts", "@scom/scom-map/config/index.css.ts"], function (require, exports, components_3, utils_1) {
+define("@scom/scom-map/config/index.tsx", ["require", "exports", "@ijstech/components", "@scom/scom-map/utils.ts", "@scom/scom-map/store.ts", "@scom/scom-map/config/index.css.ts"], function (require, exports, components_3, utils_1, store_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     let ScomMapConfig = class ScomMapConfig extends components_3.Module {
@@ -180,6 +182,7 @@ define("@scom/scom-map/config/index.tsx", ["require", "exports", "@ijstech/compo
             super(parent, options);
             this.searchTimer = null;
             this.onInputChanged = this.onInputChanged.bind(this);
+            this.googleMapsCallback = this.googleMapsCallback.bind(this);
         }
         get data() {
             return this._data;
@@ -191,6 +194,187 @@ define("@scom/scom-map/config/index.tsx", ["require", "exports", "@ijstech/compo
         async updateData() {
             this._data = await this.formEl.getFormData();
         }
+        iniGoogleMap() {
+            var _a, _b;
+            this.geocoder = new google['maps']['Geocoder']();
+            this.infowindow = new google['maps']['InfoWindow']();
+            const lat = ((_a = this.data) === null || _a === void 0 ? void 0 : _a.lat) || 22.396428;
+            const long = ((_b = this.data) === null || _b === void 0 ? void 0 : _b.long) || 114.10949700000003;
+            const myOptions = {
+                center: new google['maps']['LatLng'](lat, long),
+                zoom: this.data.zoom,
+                mapTypeId: this.data.viewMode
+            };
+            this.mapElm = new google['maps']['Map'](this.mapWrapper, myOptions);
+            if (this.data.address)
+                this.findPlace(this.data.address);
+            this.updateAlignment();
+        }
+        updateMap(data) {
+            const { viewMode, zoom, address, apiKey } = data;
+            if (apiKey !== apiKey) { }
+            if (zoom !== this.data.zoom)
+                this.mapElm.setZoom(zoom);
+            if (address !== this.data.address)
+                this.findPlace(address);
+            if (viewMode !== this.data.viewMode)
+                this.mapElm.setMapTypeId(viewMode);
+        }
+        panTo(lat, lng) {
+            if (!this.mapElm)
+                return;
+            this.mapElm['panTo'](this.createLatLng(lat, lng));
+        }
+        createLatLng(lat, lng) {
+            return new google['maps']['LatLng'](lat, lng);
+        }
+        locate(value, callback) {
+            this.data.address = value;
+            if (this.mapElm) {
+                const self = this;
+                this.getLocation(value, function (latlng) {
+                    if (latlng) {
+                        self.mapElm['panTo'](latlng);
+                        if (callback)
+                            callback(latlng);
+                    }
+                    else if (callback)
+                        callback(undefined);
+                });
+            }
+        }
+        findPlace(query) {
+            const request = {
+                query,
+                fields: ['name', 'geometry'],
+            };
+            if (!this.placeService)
+                this.placeService = new google['maps']['places']['PlacesService'](this.mapElm);
+            this.placeService.findPlaceFromQuery(request, (results, status) => {
+                var _a, _b;
+                if (status === google['maps']['places']['PlacesServiceStatus'].OK && results) {
+                    for (let i = 0; i < results.length; i++) {
+                        this.createMarker(results[i]);
+                    }
+                    this.mapElm.setCenter(results[0].geometry.location);
+                    if ((_b = (_a = results[0]) === null || _a === void 0 ? void 0 : _a.geometry) === null || _b === void 0 ? void 0 : _b.location) {
+                        const lat = results[0].geometry.location.lat();
+                        const long = results[0].geometry.location.lng();
+                        this.latInput.value = lat;
+                        this.longInput.value = long;
+                        this.panTo(lat, long);
+                    }
+                }
+            });
+        }
+        createMarker(place) {
+            const self = this;
+            if (!place.geometry || !place.geometry.location)
+                return;
+            const marker = new google['maps']['Marker']({
+                map: this.mapElm,
+                position: place.geometry.location,
+            });
+            google['maps']['event'].addListener(marker, 'click', () => {
+                self.infowindow.setContent(place.name || '');
+                self.infowindow.open(self.mapElm);
+            });
+        }
+        getLocation(value, callback) {
+            if (this.mapElm) {
+                this.geocoder['geocode']({ address: value }, function (results, status) {
+                    if (status == google['maps']['GeocoderStatus']['OK']) {
+                        const latlng = results[0]['geometry']['location'];
+                        const point = {
+                            lat: latlng['lat'](),
+                            lng: latlng['lng'](),
+                        };
+                        if (callback)
+                            callback(point);
+                    }
+                    else if (callback)
+                        callback(undefined);
+                });
+            }
+            else if (callback)
+                callback(undefined);
+        }
+        updateAlignment() {
+            if (this.mapElm)
+                google['maps']['event']['trigger'](this.mapElm, 'resize');
+        }
+        // searchPlaces(searchData: any) {
+        //   const { lat, lng, radius, keyword, callback } = searchData
+        //   if (this.geocoder) {
+        //     let latlng = this.createLatLng(lat, lng);
+        //     let request = {
+        //       location: latlng,
+        //       rankBy: google['maps']['places']['RankBy']['DISTANCE'],
+        //       radius: radius,
+        //       keyword: keyword,
+        //     }
+        //     let self = this
+        //     if (!this.placeService)
+        //       this.placeService = new google['maps']['places']['PlacesService'](
+        //         this.mapElm
+        //       )
+        //     this.placeService.search(request, function (result: any, status: any) {
+        //       if (status == google['maps']['places']['PlacesServiceStatus']['OK']) {
+        //         console.log('result: ', result)
+        //         for (let i = 0; i < result.length; i++) {
+        //           let item = result[i]
+        //           let lat2 = item['geometry']['location']['lat']()
+        //           let lng2 = item['geometry']['location']['lng']()
+        //           item['distance'] = self.getDistance(lat, lng, lat2, lng2)
+        //         }
+        //         callback(result)
+        //       } else callback(undefined)
+        //     })
+        //   } else {
+        //     this.searchPlacesData = {
+        //       lat: lat,
+        //       lng: lng,
+        //       radius: radius,
+        //       keyword: keyword,
+        //       callback: callback,
+        //     }
+        //   }
+        // }
+        getDistance(lat1, lng1, lat2, lng2) {
+            function deg2rad(deg) {
+                return deg * (Math.PI / 180);
+            }
+            let R = 6371; // Radius of the earth in km
+            let dLat = deg2rad(lat2 - lat1); // deg2rad below
+            let dLng = deg2rad(lng2 - lng1);
+            let a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(deg2rad(lat1)) *
+                    Math.cos(deg2rad(lat2)) *
+                    Math.sin(dLng / 2) *
+                    Math.sin(dLng / 2);
+            let c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            let d = R * c; // Distance in km
+            return Math.round(d * 1000);
+        }
+        initScript() {
+            const oldScript = document.head.querySelector(`[name="googleMapScript"]`);
+            if (oldScript) {
+                this.googleMapsCallback();
+                return;
+            }
+            const apiKey = (0, store_2.getAPIKey)();
+            const src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=3&callback=initMap&libraries=places`;
+            const script = document.createElement('script');
+            script.setAttribute('async', 'true');
+            script.setAttribute('name', 'googleMapScript');
+            script.src = src;
+            document.head.appendChild(script);
+            window.initMap = this.googleMapsCallback;
+        }
+        googleMapsCallback() {
+            this.mapElm = undefined;
+            this.iniGoogleMap();
+        }
         renderUI() {
             this.formEl.clearInnerHTML();
             this.formEl.jsonSchema = (0, utils_1.getPropertiesSchema)();
@@ -198,19 +382,29 @@ define("@scom/scom-map/config/index.tsx", ["require", "exports", "@ijstech/compo
                 columnWidth: '100%',
                 columnsPerRow: 2,
                 confirmButtonOptions: {
-                    hide: true
-                }
+                    hide: true,
+                },
             };
             this.formEl.renderForm();
             this.formEl.clearFormData();
             this.formEl.setFormData(this._data);
-            const url = (0, utils_1.getUrl)(Object.assign({}, this._data));
-            this.iframeMap.url = url;
+            // const url = getUrl({ ...this._data })
+            // this.iframeMap.url = url
             const inputs = this.formEl.querySelectorAll('[scope]');
             for (let input of inputs) {
                 const inputEl = input;
-                // const scope: string = inputEl.getAttribute('scope', true, '')
-                inputEl.onChanged = this.onInputChanged;
+                const scope = inputEl.getAttribute('scope', true, '');
+                if (scope.includes('lat')) {
+                    this.latInput = inputEl;
+                    inputEl.readOnly = true;
+                }
+                else if (scope.includes('long')) {
+                    this.longInput = inputEl;
+                    inputEl.readOnly = true;
+                }
+                else {
+                    inputEl.onChanged = this.onInputChanged;
+                }
             }
         }
         onInputChanged() {
@@ -218,8 +412,9 @@ define("@scom/scom-map/config/index.tsx", ["require", "exports", "@ijstech/compo
                 clearTimeout(this.searchTimer);
             this.searchTimer = setTimeout(async () => {
                 const data = await this.formEl.getFormData();
-                const url = (0, utils_1.getUrl)(Object.assign({}, data));
-                this.iframeMap.url = url;
+                // const url = getUrl({ ...data })
+                // this.iframeMap.url = url
+                this.updateMap(data);
             }, 500);
         }
         disconnectCallback() {
@@ -235,14 +430,14 @@ define("@scom/scom-map/config/index.tsx", ["require", "exports", "@ijstech/compo
             const zoom = this.getAttribute('zoom', true, utils_1.DEFAULT_ZOOM);
             const address = this.getAttribute('address', true, '');
             this.data = { long, lat, viewMode, zoom, address };
+            this.initScript();
         }
         render() {
             return (this.$render("i-panel", null,
                 this.$render("i-vstack", { gap: '0.5rem' },
                     this.$render("i-panel", { id: 'pnlForm' },
                         this.$render("i-form", { id: 'formEl' })),
-                    this.$render("i-panel", null,
-                        this.$render("i-iframe", { id: 'iframeMap', width: '100%', height: 500, display: 'flex' })))));
+                    this.$render("i-panel", { id: 'mapWrapper', minHeight: 500 }))));
         }
     };
     ScomMapConfig = __decorate([
@@ -251,7 +446,7 @@ define("@scom/scom-map/config/index.tsx", ["require", "exports", "@ijstech/compo
     ], ScomMapConfig);
     exports.default = ScomMapConfig;
 });
-define("@scom/scom-map", ["require", "exports", "@ijstech/components", "@scom/scom-map/store.ts", "@scom/scom-map/data.json.ts", "@scom/scom-map/utils.ts", "@scom/scom-map/config/index.tsx", "@scom/scom-map/index.css.ts"], function (require, exports, components_4, store_2, data_json_1, utils_2, index_1) {
+define("@scom/scom-map", ["require", "exports", "@ijstech/components", "@scom/scom-map/store.ts", "@scom/scom-map/data.json.ts", "@scom/scom-map/utils.ts", "@scom/scom-map/config/index.tsx", "@scom/scom-map/index.css.ts"], function (require, exports, components_4, store_3, data_json_1, utils_2, index_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     const Theme = components_4.Styles.Theme.ThemeVars;
@@ -260,7 +455,7 @@ define("@scom/scom-map", ["require", "exports", "@ijstech/components", "@scom/sc
             super(parent, options);
             this.data = {};
             if (data_json_1.default) {
-                (0, store_2.setDataFromSCConfig)(data_json_1.default);
+                (0, store_3.setDataFromSCConfig)(data_json_1.default);
             }
         }
         init() {

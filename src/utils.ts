@@ -16,11 +16,13 @@ export const getPropertiesSchema = () => {
       },
       lat: {
         type: 'number',
-        title: 'Latitude'
+        title: 'Latitude',
+        readOnly: true
       },
       long: {
         type: 'number',
-        title: 'Longitude'
+        title: 'Longitude',
+        readOnly: true
       },
       zoom: {
         type: 'number',
